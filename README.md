@@ -29,7 +29,7 @@
 ## 🚀 تشغيل سريع (Ubuntu / Debian)
 
 ```bash
-git clone https://github.com/abdulazizaaa/arabic-dictate.git
+git clone https://github.com/abdualzizaaa/arabic-dictate.git
 cd arabic-dictate
 ./install.sh              # بيئة بايثون + الأمر العام (تثبيت سريع)
 arabic-dictate doctor     # تحقّق من البيئة والمحرّكات

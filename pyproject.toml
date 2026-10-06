@@ -32,9 +32,9 @@ dependencies = [
 dynamic = ["version"]
 
 [project.urls]
-Homepage = "https://github.com/abdulazizaaa/arabic-dictate"
-Repository = "https://github.com/abdulazizaaa/arabic-dictate"
-Issues = "https://github.com/abdulazizaaa/arabic-dictate/issues"
+Homepage = "https://github.com/abdualzizaaa/arabic-dictate"
+Repository = "https://github.com/abdualzizaaa/arabic-dictate"
+Issues = "https://github.com/abdualzizaaa/arabic-dictate/issues"
 
 [project.optional-dependencies]
 whisper = ["faster-whisper>=1.0", "soundfile>=0.12"]

@@ -5,7 +5,7 @@
 ## بيئة التطوير
 
 ```bash
-git clone https://github.com/abdulazizaaa/arabic-dictate.git
+git clone https://github.com/abdualzizaaa/arabic-dictate.git
 cd arabic-dictate
 python3 -m venv --system-site-packages .venv
 .venv/bin/pip install -e ".[whisper,meeting,dev]"

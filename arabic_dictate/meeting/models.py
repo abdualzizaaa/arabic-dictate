@@ -41,7 +41,7 @@ EMBEDDINGS: dict[str, dict[str, str]] = {
 }
 DEFAULT_EMBEDDING = "eres2net"
 
-_USER_AGENT = "arabic-dictate/1.0 (+https://github.com/abdulazizaaa/arabic-dictate)"
+_USER_AGENT = "arabic-dictate/1.0 (+https://github.com/abdualzizaaa/arabic-dictate)"
 
 
 def segmentation_path() -> pathlib.Path:

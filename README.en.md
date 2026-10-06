@@ -31,7 +31,7 @@ transcript — Speaker 1, Speaker 2, Speaker 3…
 ## 🚀 Quick start (Ubuntu / Debian)
 
 ```bash
-git clone https://github.com/abdulazizaaa/arabic-dictate.git
+git clone https://github.com/abdualzizaaa/arabic-dictate.git
 cd arabic-dictate
 ./install.sh              # Python env + global command (fast install)
 arabic-dictate doctor     # verify environment and engines
