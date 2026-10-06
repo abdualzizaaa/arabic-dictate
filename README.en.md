@@ -9,6 +9,7 @@ transcript — Speaker 1, Speaker 2, Speaker 3…
 
 **العربية:** [README.md](README.md) · **Full guide (Arabic):** [GUIDE.ar.md](GUIDE.ar.md)
 
+[![CI](https://github.com/abdualzizaaa/arabic-dictate/actions/workflows/ci.yml/badge.svg)](https://github.com/abdualzizaaa/arabic-dictate/actions/workflows/ci.yml)
 ![License MIT](https://img.shields.io/badge/License-MIT-green.svg)
 ![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)
 ![Platform Linux (X11)](https://img.shields.io/badge/Platform-Linux%20(X11)-lightgrey.svg)

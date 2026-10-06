@@ -8,6 +8,7 @@
 
 **English:** [README.en.md](README.en.md) · **الدليل الكامل:** [GUIDE.ar.md](GUIDE.ar.md)
 
+[![CI](https://github.com/abdualzizaaa/arabic-dictate/actions/workflows/ci.yml/badge.svg)](https://github.com/abdualzizaaa/arabic-dictate/actions/workflows/ci.yml)
 ![الترخيص MIT](https://img.shields.io/badge/License-MIT-green.svg)
 ![بايثون 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)
 ![المنصة Linux (X11)](https://img.shields.io/badge/Platform-Linux%20(X11)-lightgrey.svg)
