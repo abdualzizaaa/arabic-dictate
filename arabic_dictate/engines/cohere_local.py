@@ -31,8 +31,15 @@ def _release_heap() -> None:
     """
     import ctypes
     import gc
+    import sys
 
     gc.collect()
+    if sys.platform == "win32":
+        try:
+            ctypes.windll.psapi.EmptyWorkingSet(ctypes.windll.kernel32.GetCurrentProcess())
+        except Exception:  # noqa: BLE001
+            pass
+        return
     try:
         ctypes.CDLL("libc.so.6").malloc_trim(0)
     except Exception:  # noqa: BLE001

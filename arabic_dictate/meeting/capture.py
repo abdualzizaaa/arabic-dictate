@@ -1,10 +1,15 @@
-"""تسجيل الاجتماع: الميكروفون + صوت النظام معاً (PulseAudio/PipeWire) عبر ffmpeg."""
+"""تسجيل الاجتماع: الميكروفون + صوت النظام معاً.
+
+- لينكس: PulseAudio/PipeWire عبر ffmpeg (pactl للمراقبة).
+- ويندوز: WASAPI عبر soundcard (بدون ffmpeg للتسجيل).
+"""
 from __future__ import annotations
 
 import pathlib
 import shutil
 import signal
 import subprocess
+import sys
 
 from .errors import MeetingError
 
@@ -27,6 +32,13 @@ def record_meeting(
     sample_rate: int = 16000,
 ) -> pathlib.Path:
     """يسجّل حتى Ctrl+C ثم ينهي الملف بأمان ويعيد مساره."""
+    if sys.platform == "win32":
+        from ..win_audio import record_meeting_windows
+
+        try:
+            return record_meeting_windows(out_path, input_device=input_device, sample_rate=sample_rate)
+        except RuntimeError as exc:
+            raise MeetingError(str(exc)) from exc
     if shutil.which("ffmpeg") is None:
         raise MeetingError("يلزم ffmpeg للتسجيل — ثبّته: sudo apt install ffmpeg")
 

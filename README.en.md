@@ -12,7 +12,7 @@ transcript — Speaker 1, Speaker 2, Speaker 3…
 [![CI](https://github.com/abdualzizaaa/arabic-dictate/actions/workflows/ci.yml/badge.svg)](https://github.com/abdualzizaaa/arabic-dictate/actions/workflows/ci.yml)
 ![License MIT](https://img.shields.io/badge/License-MIT-green.svg)
 ![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)
-![Platform Linux (X11)](https://img.shields.io/badge/Platform-Linux%20(X11)-lightgrey.svg)
+![Platform](https://img.shields.io/badge/Platform-Linux%20(X11)%20%7C%20Windows%20(beta)-lightgrey.svg)
 ![Local-first](https://img.shields.io/badge/Local--first-100%25-success.svg)
 
 ---
@@ -49,7 +49,25 @@ arabic-dictate engine cohere-local      # make it active
 > **Terminals** paste with `Ctrl+Shift+V`; this is configured by default. Change `paste_key`
 > in the settings if needed.
 
+## 🪟 Windows 10/11 (beta)
+
+```powershell
+git clone https://github.com/abdualzizaaa/arabic-dictate.git
+cd arabic-dictate
+.\install.ps1 -AddToPath          # extra flags: -WithMeeting, -AutoStart
+arabic-dictate doctor
+winget install ffmpeg             # needed for meeting audio conversion
+```
+
+- Tray icon, `Ctrl+Alt+D` hotkey, and automatic paste into the active window.
+- Meeting recording uses WASAPI (microphone + system audio) with no extra software.
+- **Known limitations**: pasting does not work in elevated (admin) windows or self-protecting
+  apps; some older apps paste with `Ctrl+V` instead of `Ctrl+Shift+V` (change `paste_key`).
+- The Windows port **has not been tested on real hardware yet** — reports are welcome via Issues.
+
 ## 📦 System requirements
+
+> The commands below target Ubuntu/Debian; for Windows see the section above (Python is enough).
 
 ```bash
 sudo apt install -y python3-venv python3-gi alsa-utils xdotool xclip libnotify-bin \
@@ -147,6 +165,7 @@ and the `meeting` group (speaker count, label template, output dir).
 
 ## 🗺️ Roadmap
 
+- Test the Windows port on real hardware, then promote it to stable.
 - Wayland support (paste + global hotkey).
 - Live streaming captions during meetings.
 - Named speakers via voice enrollment.
@@ -168,4 +187,6 @@ MIT — see [LICENSE](LICENSE). Standing on the shoulders of:
 - [faster-whisper](https://github.com/SYSTRAN/faster-whisper) + CTranslate2 — Whisper engine.
 - [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (Apache-2.0) + pyannote segmentation-3.0
   (MIT) + 3D-Speaker CAM++ (Apache-2.0) — speaker diarization.
+- [pystray](https://github.com/moses-palmer/pystray) (LGPLv3) + [Pillow](https://python-pillow.org/)
+  for the Windows tray, and [SoundCard](https://github.com/bastibe/SoundCard) (BSD-3) for Windows audio.
 - WebRTC VAD — silence gate.

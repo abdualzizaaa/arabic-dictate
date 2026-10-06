@@ -1,55 +1,94 @@
-"""الخفيّة: أيقونة في شريط النظام + مقبس تحكّم + التسجيل والتحويل والإدراج."""
+"""الخفيّة: أيقونة في شريط النظام + مقبس تحكّم + التسجيل والتحويل والإدراج.
+
+طبقة المنصّة: الواجهة (الأيقونة) في ``tray.py``، والنقل في ``ipc.py``،
+والمكوّنات المتبقية (تسجيل/اختصار/لصق) تُختار حسب المنصّة عبر مصانع.
+"""
 from __future__ import annotations
 
 import json
 import os
-import socket
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
 
-import gi
+from . import audio, inject, ipc
+from . import config as cfg_mod
+from .engines import ORDER, EngineError, build
+from .hotkey import create_listener
+from .textfilters import looks_like_hallucination
+from .tray import create_tray
 
-gi.require_version("Gtk", "3.0")
+_GLIB = None
 
-from gi.repository import GLib, Gtk  # noqa: E402
 
-from . import audio, inject  # noqa: E402
-from . import config as cfg_mod  # noqa: E402
-from .engines import ORDER, EngineError, build  # noqa: E402
-from .hotkey import HotkeyListener  # noqa: E402
-from .textfilters import looks_like_hallucination  # noqa: E402
+def _glib():
+    """GLib على لينكس (يُحمَّل عند أول استخدام فقط)؛ None على ويندوز."""
+    global _GLIB
+    if _GLIB is None and sys.platform != "win32":
+        from gi.repository import GLib
 
-try:  # pragma: no cover - يعتمد على وجود الـ typelib
-    gi.require_version("AyatanaAppIndicator3", "0.1")
-    from gi.repository import AyatanaAppIndicator3 as AppIndicator
-except (ValueError, ImportError):  # pragma: no cover
-    AppIndicator = None
+        _GLIB = GLib
+    return _GLIB
 
-APP_ID = "arabic-dictate"
-ICON_IDLE = "audio-input-microphone"
-ICON_RECORDING = "media-record"
-ICON_BUSY = "emblem-synchronizing"
+
+class _Dispatch:
+    """يجسّر تحديثات الواجهة إلى خيطها:
+
+    على لينكس عبر GLib (idle/timeout) كما كان، وعلى ويندوز مباشرةً —
+    الواجهة هناك (pystray) تُحمى بأقفال الخدمة.
+    """
+
+    def call_soon(self, fn, *args) -> None:
+        glib = _glib()
+        if glib is not None:
+            glib.idle_add(fn, *args)
+        else:
+            fn(*args)
+
+    def call_later(self, seconds: float, fn) -> None:
+        glib = _glib()
+        if glib is not None:
+            glib.timeout_add(int(seconds * 1000), lambda: (fn(), False)[1])
+        else:
+            timer = threading.Timer(seconds, fn)
+            timer.daemon = True
+            timer.start()
+
+    def every(self, seconds: float, fn) -> None:
+        glib = _glib()
+        if glib is not None:
+            glib.timeout_add_seconds(int(seconds), lambda: (fn(), True)[1])
+        else:
+
+            def loop() -> None:
+                while True:
+                    time.sleep(seconds)
+                    try:
+                        fn()
+                    except Exception:  # noqa: BLE001
+                        pass
+
+            threading.Thread(target=loop, daemon=True, name="ticker").start()
 
 
 class DictationService:
     def __init__(self) -> None:
         self.config = cfg_mod.load()
-        self.recorder = audio.Recorder(self.config.get("input_device"))
+        self.recorder = audio.create_recorder(self.config.get("input_device"))
         self.state = "idle"  # idle | recording | working
         self.last_text = ""
         self.last_engine = ""
         self.last_error = ""
         self._engine = None
-        self._indicator = None
-        self._menu = None
-        self._toggle_item = None
-        self._status_item = None
-        self._hotkey: HotkeyListener | None = None
-        self._server: socket.socket | None = None
+        self._tray = None
+        self._hotkey = None
+        self._server = None
         self._lock = threading.Lock()
         self._started_at = time.time()
+        self._quitting = False
+        self._dispatch = _Dispatch()
 
     # ---------- المحرّك ----------
     @property
@@ -152,16 +191,16 @@ class DictationService:
                         if reason in {"silent", "empty"}
                         else "المقطع قصير جداً"
                     )
-                    GLib.idle_add(self._finish, None, message, engine_name, 0.0)
+                    self._dispatch.call_soon(self._finish, None, message, engine_name, 0.0)
                     return
 
             text = engine.transcribe(wav_path, self.config.get("language", "ar"))
             elapsed = time.time() - started
             if not text:
-                GLib.idle_add(self._finish, None, "لم يُنتج المحرّك أي نص", engine_name, elapsed)
+                self._dispatch.call_soon(self._finish, None, "لم يُنتج المحرّك أي نص", engine_name, elapsed)
                 return
             if looks_like_hallucination(text):
-                GLib.idle_add(
+                self._dispatch.call_soon(
                     self._finish,
                     None,
                     f"سمعت ضجيجاً لا كلاماً (تجاهلت: {text.strip()[:40]})",
@@ -169,11 +208,11 @@ class DictationService:
                     elapsed,
                 )
                 return
-            GLib.idle_add(self._finish, text, None, engine_name, elapsed)
+            self._dispatch.call_soon(self._finish, text, None, engine_name, elapsed)
         except EngineError as exc:
-            GLib.idle_add(self._finish, None, str(exc), engine_name, time.time() - started)
+            self._dispatch.call_soon(self._finish, None, str(exc), engine_name, time.time() - started)
         except Exception as exc:  # noqa: BLE001
-            GLib.idle_add(self._finish, None, f"خطأ غير متوقع: {exc}", engine_name, time.time() - started)
+            self._dispatch.call_soon(self._finish, None, f"خطأ غير متوقع: {exc}", engine_name, time.time() - started)
 
     def _finish(self, text: str | None, error: str | None, engine_name: str, elapsed: float) -> bool:
         with self._lock:
@@ -213,40 +252,18 @@ class DictationService:
 
     # ---------- الإشعارات ----------
     def notify(self, title: str, body: str = "") -> None:
-        if not self.config.get("notify", True):
+        if not self.config.get("notify", True) or self._tray is None:
             return
-        try:
-            subprocess.Popen(
-                ["notify-send", "-a", "الإملاء العربي", "-i", "audio-input-microphone", title, body],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-        except FileNotFoundError:
-            pass
+        self._tray.notify(title, body)
 
-    # ---------- القائمة ----------
+    # ---------- الواجهة ----------
     def _refresh(self) -> None:
-        def update() -> bool:
-            if self._indicator is None:
-                return False
-            if self.state == "recording":
-                self._indicator.set_icon_full(ICON_RECORDING, "يسجّل الآن")
-            elif self.state == "working":
-                self._indicator.set_icon_full(ICON_BUSY, "يحوّل الصوت إلى نص")
-            else:
-                self._indicator.set_icon_full(ICON_IDLE, "جاهز")
-            if self._toggle_item is not None:
-                if self.state == "recording":
-                    self._toggle_item.set_label("⏹  إيقاف وإدراج النص")
-                elif self.state == "working":
-                    self._toggle_item.set_label("…  جارٍ التحويل")
-                else:
-                    self._toggle_item.set_label("🎙  ابدأ التسجيل")
-            if self._status_item is not None:
-                self._status_item.set_label(f"الحالة: {self._state_ar()}")
-            return False
+        self._dispatch.call_soon(self._paint)
 
-        GLib.idle_add(update)
+    def _paint(self) -> None:
+        if self._quitting or self._tray is None:
+            return
+        self._tray.update()
 
     def _state_ar(self) -> str:
         if self.state == "recording":
@@ -254,65 +271,6 @@ class DictationService:
         if self.state == "working":
             return "يحوّل…"
         return "جاهز"
-
-    def _build_menu(self) -> Gtk.Menu:
-        menu = Gtk.Menu()
-
-        self._status_item = Gtk.MenuItem(label="الحالة: جاهز")
-        self._status_item.set_sensitive(False)
-        menu.append(self._status_item)
-
-        self._toggle_item = Gtk.MenuItem(label="🎙  ابدأ التسجيل")
-        self._toggle_item.connect("activate", lambda *_: self.toggle())
-        menu.append(self._toggle_item)
-
-        menu.append(Gtk.SeparatorMenuItem())
-
-        engine_root = Gtk.MenuItem(label="المحرّك")
-        engine_menu = Gtk.Menu()
-        group: list[Gtk.RadioMenuItem] = []
-        for name in ORDER:
-            ok, reason = build(name, self.config).available()
-            label = cfg_mod.ENGINE_LABELS_AR.get(name, name)
-            if not ok:
-                label = f"{label} — غير متاح"
-            item = Gtk.RadioMenuItem(label=label)
-            if group:
-                item.join_group(group[0])
-            group.append(item)
-            item.set_active(name == self.config.get("engine"))
-            item.set_sensitive(ok)
-            if reason:
-                item.set_tooltip_text(reason)
-            item.connect("toggled", self._on_engine_toggled, name)
-            engine_menu.append(item)
-        engine_root.set_submenu(engine_menu)
-        menu.append(engine_root)
-
-        copy_item = Gtk.MenuItem(label="📋  انسخ آخر نص")
-        copy_item.connect("activate", lambda *_: self._copy_last())
-        menu.append(copy_item)
-
-        settings_item = Gtk.MenuItem(label="⚙  ملف الإعدادات")
-        settings_item.connect("activate", lambda *_: self._open_settings())
-        menu.append(settings_item)
-
-        menu.append(Gtk.SeparatorMenuItem())
-
-        quit_item = Gtk.MenuItem(label="خروج")
-        quit_item.connect("activate", lambda *_: self.quit())
-        menu.append(quit_item)
-
-        menu.show_all()
-        return menu
-
-    def _on_engine_toggled(self, item: Gtk.RadioMenuItem, name: str) -> None:
-        if not item.get_active():
-            return
-        ok, message = self.set_engine(name)
-        if ok:
-            self.notify("تم تغيير المحرّك", message)
-        self._refresh()
 
     def _copy_last(self) -> None:
         if not self.last_text:
@@ -323,7 +281,10 @@ class DictationService:
 
     def _open_settings(self) -> None:
         path = cfg_mod.ensure_config_file()
-        subprocess.Popen(["xdg-open", str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if sys.platform == "win32":
+            os.startfile(str(path))  # noqa: S606 - يفتح ملف الإعدادات بالمحرّر الافتراضي
+        else:
+            subprocess.Popen(["xdg-open", str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     # ---------- المقبس ----------
     def _handle_command(self, request: dict) -> dict:
@@ -377,11 +338,11 @@ class DictationService:
             if self._engine is not None and self._engine.name != self.config.get("engine"):
                 self._engine = None
             if not self.recorder.recording:
-                self.recorder = audio.Recorder(self.config.get("input_device"))
+                self.recorder = audio.create_recorder(self.config.get("input_device"))
             self._refresh()
             return {"ok": True, "message": "أُعيد تحميل الإعدادات"}
         if command == "quit":
-            GLib.idle_add(self.quit)
+            self._dispatch.call_soon(self.quit)
             return {"ok": True, "message": "إلى اللقاء"}
         return {"ok": False, "error": f"أمر غير معروف: {command}"}
 
@@ -394,62 +355,50 @@ class DictationService:
         except Exception as exc:  # noqa: BLE001
             self.notify("تعذّر التحميل المسبق", str(exc)[:200])
 
-    def _serve_socket(self, server: socket.socket) -> bool:
+    # ---------- المقبس (خيط موحّد يعمل على المنصتين) ----------
+    def _start_socket(self) -> bool:
         try:
-            conn, _ = server.accept()
-        except BlockingIOError:
-            return True
-        except OSError:
+            server = ipc.start_server()
+        except ipc.AlreadyRunningError:
             return False
-        with conn:
-            conn.settimeout(5.0)
-            try:
-                payload = b""
-                while not payload.endswith(b"\n") and len(payload) < 65536:
-                    chunk = conn.recv(4096)
-                    if not chunk:
-                        break
-                    payload += chunk
-                request = json.loads(payload.decode("utf-8") or "{}")
-                response = self._handle_command(request)
-            except Exception as exc:  # noqa: BLE001
-                response = {"ok": False, "error": str(exc)}
-            try:
-                conn.sendall((json.dumps(response, ensure_ascii=False) + "\n").encode("utf-8"))
-            except OSError:
-                pass
+        self._server = server
+        server.setblocking(True)
+        threading.Thread(target=self._serve_forever, daemon=True, name="ipc-server").start()
         return True
 
-    def _start_socket(self) -> bool:
-        if cfg_mod.SOCKET_PATH.exists():
-            # إن كان المقبس القديم يستجيب فهناك خفيّة حيّة — لا نسحقها
-            probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            probe.settimeout(1.0)
-            alive = False
+    def _serve_forever(self) -> None:
+        server = self._server
+        if server is None:
+            return
+        while not self._quitting:
             try:
-                probe.connect(str(cfg_mod.SOCKET_PATH))
-                alive = True
+                conn, _ = server.accept()
             except OSError:
-                pass
-            finally:
-                probe.close()
-            if alive:
-                return False
-            cfg_mod.SOCKET_PATH.unlink(missing_ok=True)
-        try:
-            server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            server.bind(str(cfg_mod.SOCKET_PATH))
-        except OSError:
-            return False
-        os.chmod(cfg_mod.SOCKET_PATH, 0o600)
-        server.listen(8)
-        server.setblocking(False)
-        self._server = server
-        GLib.io_add_watch(server, GLib.IO_IN, lambda *_: self._serve_socket(server))
-        return True
+                break
+            with conn:
+                conn.settimeout(5.0)
+                try:
+                    payload = b""
+                    while not payload.endswith(b"\n") and len(payload) < 65536:
+                        chunk = conn.recv(4096)
+                        if not chunk:
+                            break
+                        payload += chunk
+                    request = json.loads(payload.decode("utf-8") or "{}")
+                    if not ipc.authorized(request):
+                        response = {"ok": False, "error": "غير مصرّح"}
+                    else:
+                        response = self._handle_command(request)
+                except Exception as exc:  # noqa: BLE001
+                    response = {"ok": False, "error": str(exc)}
+                try:
+                    conn.sendall((json.dumps(response, ensure_ascii=False) + "\n").encode("utf-8"))
+                except OSError:
+                    pass
 
     # ---------- التشغيل ----------
     def quit(self) -> bool:
+        self._quitting = True
         try:
             if self.recorder.recording:
                 self.recorder.stop()
@@ -457,44 +406,39 @@ class DictationService:
                 self._hotkey.stop()
             if self._server:
                 self._server.close()
-            cfg_mod.SOCKET_PATH.unlink(missing_ok=True)
+            ipc.cleanup_server()
         except Exception:  # noqa: BLE001
             pass
-        Gtk.main_quit()
+        if self._tray is not None:
+            self._tray.stop()
         return False
 
     def run(self) -> int:
-        if AppIndicator is None:
-            print("خطأ: مكتبة AyatanaAppIndicator3 غير متوفرة", flush=True)
+        try:
+            self._tray = create_tray(self)
+        except RuntimeError as exc:
+            print(f"خطأ: {exc}", flush=True)
             return 2
 
         audio.sweep_temp_files()
-
-        self._indicator = AppIndicator.Indicator.new(
-            APP_ID, ICON_IDLE, AppIndicator.IndicatorCategory.APPLICATION_STATUS
-        )
-        self._indicator.set_status(AppIndicator.IndicatorStatus.ACTIVE)
-        self._indicator.set_title("الإملاء العربي")
-        self._menu = self._build_menu()
-        self._indicator.set_menu(self._menu)
 
         if not self._start_socket():
             print("هناك خفيّة تعمل بالفعل — لا حاجة لتشغيل ثانية.", flush=True)
             return 3
 
         if self.config.get("hotkey_enabled", True):
-            self._hotkey = HotkeyListener(self.config.get("hotkey", "ctrl+alt+d"), self._on_hotkey)
+            self._hotkey = create_listener(self.config.get("hotkey", "ctrl+alt+d"), self._on_hotkey)
             self._hotkey.start()
-            GLib.timeout_add(900, self._check_hotkey)
+            self._dispatch.call_later(0.9, self._check_hotkey)
 
         self._refresh()
         self.notify("الإملاء العربي يعمل", "اضغط أيقونة الميكروفون أو Ctrl+Alt+D")
-        GLib.timeout_add_seconds(1, self._tick)
-        Gtk.main()
+        self._dispatch.every(1, self._tick)
+        self._tray.run()
         return 0
 
     def _on_hotkey(self) -> None:
-        GLib.idle_add(self._hotkey_toggle)
+        self._dispatch.call_soon(self._hotkey_toggle)
 
     def _hotkey_toggle(self) -> bool:
         self.toggle()

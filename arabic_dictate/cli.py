@@ -4,24 +4,26 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import socket
 import subprocess
 import sys
 import time
 from pathlib import Path
 
 from . import config as cfg_mod
+from . import ipc
 from .engines import ORDER
 
 
 def send(command: str, arg: str | None = None, timeout: float = 180.0) -> dict:
-    if not cfg_mod.SOCKET_PATH.exists():
+    if not ipc.available():
         return {"ok": False, "error": "الخفيّة لا تعمل", "offline": True}
-    client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    client.settimeout(timeout)
     try:
-        client.connect(str(cfg_mod.SOCKET_PATH))
-        client.sendall((json.dumps({"command": command, "arg": arg}, ensure_ascii=False) + "\n").encode())
+        client = ipc.connect(timeout)
+    except (OSError, ConnectionError) as exc:
+        return {"ok": False, "error": str(exc), "offline": True}
+    try:
+        request = ipc.sign({"command": command, "arg": arg})
+        client.sendall((json.dumps(request, ensure_ascii=False) + "\n").encode())
         payload = b""
         while not payload.endswith(b"\n"):
             chunk = client.recv(65536)
@@ -36,7 +38,7 @@ def send(command: str, arg: str | None = None, timeout: float = 180.0) -> dict:
 
 
 def daemon_running() -> bool:
-    if not cfg_mod.SOCKET_PATH.exists():
+    if not ipc.available():
         return False
     response = send("status", timeout=3.0)
     return bool(response.get("ok"))
@@ -46,16 +48,22 @@ def spawn_daemon() -> bool:
     cfg_mod.STATE_DIR.mkdir(parents=True, exist_ok=True)
     log = open(cfg_mod.LOG_PATH, "ab", buffering=0)
     env = dict(os.environ)
-    typelib = str(Path.home() / ".local" / "lib" / "girepository-1.0")
-    env["GI_TYPELIB_PATH"] = typelib + (os.pathsep + env["GI_TYPELIB_PATH"] if env.get("GI_TYPELIB_PATH") else "")
+    kwargs: dict = {}
+    if sys.platform == "win32":
+        # بلا نافذة كونسول — المخرجات تذهب إلى ملف السجل
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+    else:
+        typelib = str(Path.home() / ".local" / "lib" / "girepository-1.0")
+        env["GI_TYPELIB_PATH"] = typelib + (os.pathsep + env["GI_TYPELIB_PATH"] if env.get("GI_TYPELIB_PATH") else "")
+        kwargs["start_new_session"] = True
     subprocess.Popen(
         [sys.executable, "-m", "arabic_dictate.daemon"],
         stdout=log,
         stderr=log,
         stdin=subprocess.DEVNULL,
-        start_new_session=True,
         env=env,
         cwd=str(Path(__file__).resolve().parent.parent),
+        **kwargs,
     )
     return True
 
@@ -327,25 +335,40 @@ def cmd_meeting_transcribe(args: argparse.Namespace) -> int:
 
 
 def cmd_doctor(_args: argparse.Namespace) -> int:
+    import importlib.util
+
     from .engines import build
+
+    def has_module(name: str) -> bool:
+        try:
+            return importlib.util.find_spec(name) is not None
+        except (ImportError, ValueError):
+            return False
 
     config = cfg_mod.load()
     print("— الفحص البيئي —")
-    checks = {
-        "arecord": subprocess.run(["which", "arecord"], capture_output=True).returncode == 0,
-        "xdotool": subprocess.run(["which", "xdotool"], capture_output=True).returncode == 0,
-        "xclip": subprocess.run(["which", "xclip"], capture_output=True).returncode == 0,
-        "notify-send": subprocess.run(["which", "notify-send"], capture_output=True).returncode == 0,
-        "X11": bool(os.environ.get("DISPLAY")),
-    }
-    try:
-        import gi  # noqa: F401
+    if sys.platform == "win32":
+        checks = {
+            "soundcard (الميكروفون)": has_module("soundcard"),
+            "pystray (أيقونة شريط المهام)": has_module("pystray"),
+            "Pillow (الأيقونة)": has_module("PIL"),
+        }
+    else:
+        checks = {
+            "arecord": subprocess.run(["which", "arecord"], capture_output=True).returncode == 0,
+            "xdotool": subprocess.run(["which", "xdotool"], capture_output=True).returncode == 0,
+            "xclip": subprocess.run(["which", "xclip"], capture_output=True).returncode == 0,
+            "notify-send": subprocess.run(["which", "notify-send"], capture_output=True).returncode == 0,
+            "X11": bool(os.environ.get("DISPLAY")),
+        }
+        try:
+            import gi  # noqa: F401
 
-        gi.require_version("Gtk", "3.0")
-        gi.require_version("AyatanaAppIndicator3", "0.1")
-        checks["indicator"] = True
-    except Exception:  # noqa: BLE001
-        checks["indicator"] = False
+            gi.require_version("Gtk", "3.0")
+            gi.require_version("AyatanaAppIndicator3", "0.1")
+            checks["indicator"] = True
+        except Exception:  # noqa: BLE001
+            checks["indicator"] = False
     checks["daemon"] = daemon_running()
 
     for name, ok in checks.items():
@@ -376,9 +399,12 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
     meeting_checks = {
         "sherpa-onnx (تمييز المتحدثين)": has_sherpa,
         "ffmpeg (تحويل وتفريغ الصيغ)": _shutil.which("ffmpeg") is not None,
-        "pactl (تسجيل صوت النظام)": _shutil.which("pactl") is not None,
         "نماذج التمييز منزّلة": meeting_models.models_ready(embedding),
     }
+    if sys.platform == "win32":
+        meeting_checks["soundcard (تسجيل صوت النظام)"] = has_module("soundcard")
+    else:
+        meeting_checks["pactl (تسجيل صوت النظام)"] = _shutil.which("pactl") is not None
     for name, ok in meeting_checks.items():
         print(f"  {'✓' if ok else '✗'} {name}")
     if not all(meeting_checks.values()):

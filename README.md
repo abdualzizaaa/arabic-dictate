@@ -11,7 +11,7 @@
 [![CI](https://github.com/abdualzizaaa/arabic-dictate/actions/workflows/ci.yml/badge.svg)](https://github.com/abdualzizaaa/arabic-dictate/actions/workflows/ci.yml)
 ![الترخيص MIT](https://img.shields.io/badge/License-MIT-green.svg)
 ![بايثون 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)
-![المنصة Linux (X11)](https://img.shields.io/badge/Platform-Linux%20(X11)-lightgrey.svg)
+![المنصة](https://img.shields.io/badge/Platform-Linux%20(X11)%20%7C%20Windows%20(beta)-lightgrey.svg)
 ![محلي أولاً](https://img.shields.io/badge/Local--first-100%25-success.svg)
 
 ---
@@ -47,7 +47,25 @@ arabic-dictate engine cohere-local      # واجعله النشط
 > **الطرفيات**: مفتاح اللصق الافتراضي `Ctrl+Shift+V`، وهو مضبوط تلقائياً. لتغييره:
 > `paste_key` في الإعدادات.
 
+## 🪟 ويندوز 10/11 (تجريبي)
+
+```powershell
+git clone https://github.com/abdualzizaaa/arabic-dictate.git
+cd arabic-dictate
+.\install.ps1 -AddToPath          # أعلام إضافية: -WithMeeting و -AutoStart
+arabic-dictate doctor
+winget install ffmpeg             # مطلوب لتحويل صيغ الصوت في الاجتماعات
+```
+
+- الأيقونة في شريط المهام، والاختصار الافتراضي `Ctrl+Alt+D`، واللصق تلقائي في النافذة النشطة.
+- تسجيل الاجتماع يستخدم WASAPI (ميكروفون + صوت النظام) بلا برامج إضافية.
+- **قيود معروفة**: لا يعمل اللصق في النوافذ المرفوعة (صلاحيات مدير) أو البرامج ذات الحماية
+  الذاتية؛ وبعض البرامج القديمة تلصق بـ `Ctrl+V` بدل `Ctrl+Shift+V` (عدّل `paste_key`).
+- نسخة ويندوز **لم تُجرَّب بعد على جهاز حقيقي** — تجاربكم مرحّب بها عبر Issues.
+
 ## 📦 متطلبات النظام
+
+> أوامر هذا القسم لأوبنتو/ديبيان؛ لمتطلبات ويندوز راجع قسم ويندوز أعلاه (يكفيها بايثون).
 
 ```bash
 sudo apt install -y python3-venv python3-gi alsa-utils xdotool xclip libnotify-bin \
@@ -146,6 +164,7 @@ arabic-dictate meeting transcribe meeting.wav --format srt --out ./transcripts
 
 ## 🗺️ خارطة الطريق
 
+- تجربة نسخة ويندوز على أجهزة حقيقية ثم تثبيتها رسمياً.
 - دعم Wayland (لصق واختصار عام).
 - تفريغ مباشر (بثّ نصي) أثناء الاجتماع بدون عناوين لحظية.
 - تسمية المتحدثين بأسمائهم عبر بصمة صوت (تسجيل عيّنة لكل شخص).
@@ -167,4 +186,6 @@ arabic-dictate meeting transcribe meeting.wav --format srt --out ./transcripts
 - [faster-whisper](https://github.com/SYSTRAN/faster-whisper) + CTranslate2 — محرّك ويسبر.
 - [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (Apache-2.0) + pyannote segmentation-3.0
   (MIT) + 3D-Speaker CAM++ (Apache-2.0) — تمييز المتحدثين.
+- [pystray](https://github.com/moses-palmer/pystray) (LGPLv3) + [Pillow](https://python-pillow.org/)
+  لأيقونة ويندوز، و[SoundCard](https://github.com/bastibe/SoundCard) (BSD-3) لصوت ويندوز.
 - WebRTC VAD — بوابة الصمت.

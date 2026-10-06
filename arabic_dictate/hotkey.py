@@ -1,43 +1,60 @@
-"""اختصار لوحة مفاتيح عام على X11 (افتراضياً Ctrl+Alt+D) للتبديل بين التسجيل والإيقاف."""
+"""الاختصار العالمي: X11 (XGrabKey) على لينكس، وRegisterHotKey على ويندوز."""
 from __future__ import annotations
 
+import sys
 import threading
 import time
 from collections.abc import Callable
 
-MODIFIER_MASKS = {
+MODIFIER_ALIASES = {
+    "ctrl": "ctrl",
+    "control": "ctrl",
+    "alt": "alt",
+    "shift": "shift",
+    "super": "super",
+    "win": "super",
+    "mod4": "super",
+}
+
+X11_MASKS = {
     "ctrl": "ControlMask",
-    "control": "ControlMask",
     "alt": "Mod1Mask",
     "shift": "ShiftMask",
     "super": "Mod4Mask",
-    "win": "Mod4Mask",
-    "mod4": "Mod4Mask",
 }
 
 LOCK_MASKS = ("Mod2Mask", "LockMask")
 
 
 def parse_hotkey(spec: str) -> tuple[str, list[str]]:
-    """'ctrl+alt+d' -> ('d', ['ControlMask', 'Mod1Mask'])"""
+    """'ctrl+alt+d' -> ('d', ['ctrl', 'alt']) — مُعدِّلات معيارية لكل المنصات."""
     parts = [p.strip().lower() for p in spec.split("+") if p.strip()]
     if not parts:
         raise ValueError("اختصار فارغ")
     key = parts[-1]
-    mods = []
+    mods: list[str] = []
     for part in parts[:-1]:
-        mask = MODIFIER_MASKS.get(part)
-        if mask is None:
+        canonical = MODIFIER_ALIASES.get(part)
+        if canonical is None:
             raise ValueError(f"مُعدِّل غير معروف: {part}")
-        if mask not in mods:
-            mods.append(mask)
+        if canonical not in mods:
+            mods.append(canonical)
     if not mods:
         raise ValueError("الاختصار يحتاج مُعدِّلاً واحداً على الأقل (ctrl/alt/super)")
     return key, mods
 
 
+def create_listener(spec: str, callback: Callable[[], None]):
+    """مصنع المستمع حسب المنصّة."""
+    if sys.platform == "win32":
+        from .win_hotkey import WindowsHotkeyListener
+
+        return WindowsHotkeyListener(spec, callback)
+    return HotkeyListener(spec, callback)
+
+
 class HotkeyListener(threading.Thread):
-    """يستمع للاختصار على مستوى الجلسة عبر XGrabKey."""
+    """يستمع للاختصار على مستوى الجلسة عبر XGrabKey (لينكس)."""
 
     def __init__(self, spec: str, callback: Callable[[], None]) -> None:
         super().__init__(daemon=True, name="hotkey")
@@ -78,7 +95,7 @@ class HotkeyListener(threading.Thread):
 
         base = 0
         for mod in mods:
-            base |= getattr(X, mod)
+            base |= getattr(X, X11_MASKS[mod])
         masks = {base}
         for lock in LOCK_MASKS:
             masks.add(base | getattr(X, lock))

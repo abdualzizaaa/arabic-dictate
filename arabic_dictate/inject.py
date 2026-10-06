@@ -6,9 +6,11 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 import time
 
 DEVNULL = subprocess.DEVNULL
+IS_WINDOWS = sys.platform == "win32"
 
 
 def _run(args: list[str], data: bytes | None = None, timeout: float = 8.0) -> subprocess.CompletedProcess:
@@ -22,6 +24,10 @@ def _run(args: list[str], data: bytes | None = None, timeout: float = 8.0) -> su
 
 
 def set_clipboard(text: str) -> bool:
+    if IS_WINDOWS:
+        from .win_input import set_clipboard as _impl
+
+        return _impl(text)
     # لا أنابيب إطلاقاً: xclip يتفرّع ليبقى مالكاً للحافظة فيمسك أنبوب stderr
     # ويجعل أي انتظار يتعلّق للأبد.
     try:
@@ -46,6 +52,10 @@ def set_clipboard(text: str) -> bool:
 
 
 def clipboard_text() -> str:
+    if IS_WINDOWS:
+        from .win_input import clipboard_text as _impl
+
+        return _impl()
     try:
         proc = _run(["xclip", "-selection", "clipboard", "-o"], timeout=4.0)
     except (subprocess.TimeoutExpired, FileNotFoundError):
@@ -56,6 +66,10 @@ def clipboard_text() -> str:
 
 
 def active_window_title() -> str:
+    if IS_WINDOWS:
+        from .win_input import active_window_title as _impl
+
+        return _impl()
     try:
         proc = _run(["xdotool", "getactivewindow", "getwindowname"], timeout=4.0)
     except (subprocess.TimeoutExpired, FileNotFoundError):
@@ -65,6 +79,10 @@ def active_window_title() -> str:
 
 def paste(text: str, mode: str = "paste", paste_key: str = "ctrl+shift+v") -> tuple[bool, str]:
     """mode: paste (لصق بمفتاح) | type (كتابة حرفية) | clipboard (نسخ فقط)."""
+    if IS_WINDOWS:
+        from .win_input import paste as _impl
+
+        return _impl(text, mode, paste_key)
     if not text:
         return False, "نص فارغ"
 

@@ -230,3 +230,20 @@ arabic-dictate meeting transcribe meeting.wav --speakers 2 --format srt --out ./
 - إن كان عدة أشخاص يتشاركون ميكروفوناً واحداً في نفس الغرفة تقل دقة التمييز — الأفضل
   ميكروفون قريب من المتحدثين.
 - تراخيص النماذج نظيفة (MIT/Apache-2.0/CC-BY-4.0) وبلا أي حساب أو شروط تحميل.
+
+---
+
+## ١٢. ويندوز ١٠/١١ (تجريبي)
+
+```powershell
+.\install.ps1 -AddToPath -WithMeeting
+arabic-dictate ensure
+```
+
+- الأيقونة في شريط المهام، والاختصار `Ctrl+Alt+D`، والإعدادات في
+  `%APPDATA%\arabic-dictate\config.json` والسجل في `%LOCALAPPDATA%\arabic-dictate\`.
+- صوت النظام للاجتماعات يعمل عبر WASAPI (soundcard) بدون ffmpeg للتسجيل؛ ffmpeg مطلوب فقط
+  لتحويل صيغ الملفات في `meeting transcribe`.
+- اللصق الافتراضي `Ctrl+Shift+V` مدعوم؛ في البرامج التي تلصق بـ `Ctrl+V` عدّل `paste_key`.
+- قيود معروفة: لا لصق في نوافذ المدير (UAC) ولا في بعض البرامج الحامية؛ النسخة بانتظار تجربة
+  حقيقية — أبلغ عن أي مشكلة عبر Issues في المستودع.

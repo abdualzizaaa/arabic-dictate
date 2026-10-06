@@ -4,17 +4,26 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import sys
 from typing import Any
 
 APP_NAME = "arabic-dictate"
+IS_WINDOWS = sys.platform == "win32"
 
 HOME = pathlib.Path.home()
-CONFIG_DIR = pathlib.Path(os.environ.get("ARABIC_DICTATE_CONFIG_DIR", HOME / ".config" / APP_NAME))
+if IS_WINDOWS:
+    _APPDATA = pathlib.Path(os.environ.get("APPDATA") or HOME / "AppData" / "Roaming")
+    _LOCALAPPDATA = pathlib.Path(os.environ.get("LOCALAPPDATA") or HOME / "AppData" / "Local")
+    CONFIG_DIR = pathlib.Path(os.environ.get("ARABIC_DICTATE_CONFIG_DIR", _APPDATA / APP_NAME))
+    STATE_DIR = pathlib.Path(os.environ.get("ARABIC_DICTATE_STATE_DIR", _LOCALAPPDATA / APP_NAME))
+else:
+    CONFIG_DIR = pathlib.Path(os.environ.get("ARABIC_DICTATE_CONFIG_DIR", HOME / ".config" / APP_NAME))
+    STATE_DIR = pathlib.Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / APP_NAME
 CONFIG_PATH = CONFIG_DIR / "config.json"
 COHERE_KEY_PATH = CONFIG_DIR / "cohere.key"
-STATE_DIR = pathlib.Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / APP_NAME
 STATE_DIR.mkdir(parents=True, exist_ok=True)
-SOCKET_PATH = STATE_DIR / "daemon.sock"
+SOCKET_PATH = STATE_DIR / "daemon.sock"  # لينكس: مقبس AF_UNIX
+IPC_INFO_PATH = STATE_DIR / "daemon.json"  # ويندوز: منفذ TCP المحلي + التوكن
 LOG_PATH = STATE_DIR / "daemon.log"
 
 DEFAULTS: dict[str, Any] = {

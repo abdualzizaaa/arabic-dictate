@@ -9,15 +9,21 @@ from arabic_dictate.hotkey import parse_hotkey
 def test_parse_valid_combination():
     key, mods = parse_hotkey("ctrl+alt+d")
     assert key == "d"
-    assert "ControlMask" in mods
-    assert "Mod1Mask" in mods
+    assert "ctrl" in mods
+    assert "alt" in mods
 
 
 def test_parse_is_case_insensitive():
     key, mods = parse_hotkey("SUPER+Shift+K")
     assert key == "k"
-    assert "Mod4Mask" in mods
-    assert "ShiftMask" in mods
+    assert "super" in mods
+    assert "shift" in mods
+
+
+def test_aliases_map_to_canonical_modifiers():
+    key, mods = parse_hotkey("control+win+d")
+    assert key == "d"
+    assert mods == ["ctrl", "super"]
 
 
 def test_modifier_required():

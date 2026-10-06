@@ -5,6 +5,7 @@ import os
 import signal
 import struct
 import subprocess
+import sys
 import tempfile
 import time
 import wave
@@ -50,6 +51,15 @@ def sweep_temp_files(max_age_hours: float = 24.0) -> int:
         except OSError:
             continue
     return removed
+
+
+def create_recorder(input_device: str | None = None):
+    """مصنع المسجّل حسب المنصّة: arecord على لينكس، soundcard على ويندوز."""
+    if sys.platform == "win32":
+        from .win_audio import WindowsRecorder
+
+        return WindowsRecorder(input_device)
+    return Recorder(input_device)
 
 
 class Recorder:
