@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# مُشغّل الإملاء العربي — يضبط مسار الـ typelib ثم يستدعي التطبيق
+set -euo pipefail
+
+TYPELIB_DIR="$HOME/.local/lib/girepository-1.0"
+if [ -d "$TYPELIB_DIR" ]; then
+  export GI_TYPELIB_PATH="$TYPELIB_DIR${GI_TYPELIB_PATH:+:$GI_TYPELIB_PATH}"
+fi
+
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+PROJECT_DIR="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
+
+if [ -x "$PROJECT_DIR/.venv/bin/python" ]; then
+  exec "$PROJECT_DIR/.venv/bin/python" -m arabic_dictate "$@"
+fi
+exec python3 -m arabic_dictate "$@"

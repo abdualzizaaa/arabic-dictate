@@ -1,0 +1,69 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "arabic-dictate"
+description = "Local-first Arabic dictation for Linux: type Arabic at your cursor, and transcribe meetings with speaker labels"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "abdulazizaaa" }]
+keywords = ["arabic", "dictation", "speech-to-text", "asr", "whisper", "cohere", "diarization", "linux"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: X11 Applications :: GTK",
+  "Intended Audience :: End Users/Desktop",
+  "Natural Language :: Arabic",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Multimedia :: Sound/Audio :: Speech",
+]
+dependencies = [
+  "requests>=2.28",
+  "numpy>=1.24",
+  "webrtcvad>=2.0.10",
+  "python-xlib>=0.33",
+]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/abdulazizaaa/arabic-dictate"
+Repository = "https://github.com/abdulazizaaa/arabic-dictate"
+Issues = "https://github.com/abdulazizaaa/arabic-dictate/issues"
+
+[project.optional-dependencies]
+whisper = ["faster-whisper>=1.0", "soundfile>=0.12"]
+cohere-local = ["transformers>=5.4", "torch", "soundfile>=0.12"]
+meeting = ["sherpa-onnx>=1.12", "soundfile>=0.12"]
+dev = ["pytest>=7", "ruff>=0.6"]
+all = [
+  "faster-whisper>=1.0",
+  "soundfile>=0.12",
+  "transformers>=5.4",
+  "torch",
+  "sherpa-onnx>=1.12",
+]
+
+[project.scripts]
+arabic-dictate = "arabic_dictate.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["arabic_dictate*"]
+
+[tool.setuptools.dynamic]
+version = { attr = "arabic_dictate.__version__" }
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "I", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit"]
